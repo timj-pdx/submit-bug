@@ -1,0 +1,78 @@
+#! /bin/bash -ue
+
+if [[ $# != 1 ]]; then
+cat <<EOF
+
+    usage: submit-bug file
+        file  The contents of this file will be inserted into the
+              the 'description' field of the BUG.
+
+EOF
+    exit
+fi
+
+file=$1
+[[ ! -f $file ]] && (echo "$file: No such file or directory" ; exit)
+descStr=$(cat $file)
+
+# Copy the 'subject' to the 'Summary String' 
+if [[ -f subject ]]; then
+    sumStr=$(cat subject)
+else
+    sumStr="Unknown Subject"
+fi
+
+data='{
+    "fields": {
+        "project": { "key": "RT" },
+        "issuetype": { "name": "Bug" },
+        "summary": "'$sumStr'",
+        "description": "'$descStr'",
+	"assignee": { "name": "timjpdx" },
+	"priority": { "name": "High" }
+    }
+}'
+
+# Don't exit if 'curl' returns 'Bad Status'
+set +e
+set -x
+curl --insecure -D- -X POST -u timjpdx:skifor51 --data "$data" \
+      -H "Content-Type: application/json" \
+      ace:8080/rest/api/2/issue > curl.stdout 2> curl.stderr
+set +e
+set -x
+# If 'curl' return 'Bad Status', a message (not jason) will have been
+# sent to stderr (curl.stderr)
+stat=$?
+if [[ $stat != 0 ]]; then
+    echo 'curl' exited with a bad status > reply.body
+    cat curl.stderr >> reply.body
+    exit
+fi
+
+# 'curl' exited with 'Good Status', Grab Json string from stdout (curl.stdout)
+egrep "^{" curl.stdout > rest-reply.json
+key=$(jq --raw-output .key rest-reply.json)
+
+# If bug is created the JSON string will contain a 'key' field. If not grab
+# the 'errors' & 'errorMessages from the JSON string that was returned
+if [[ $key == "null" ]]; then
+cat<<EOF > reply.body
+An error was encountered while attempting to generate an SET JIRA Bug. The
+following error messages were received from the JIRA REST API:
+ERROR: $(jq --raw-output .errors rest-reply.json)
+$(jq --raw-output .errorMessages rest-reply.json)
+
+EOF
+    cat reply.body
+    exit 1
+fi
+
+# All is well so just display a success message with ID & Key of new BUG
+id=$(jq --raw-output .id rest-reply.json)
+cat <<EOF > reply.body
+A new STM Execution Tracking (SET) Bug has been submitted on your behalf.
+    ID  = $id
+    Key = $key
+EOF
+cat reply.body
