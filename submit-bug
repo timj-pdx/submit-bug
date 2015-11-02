@@ -1,5 +1,9 @@
 #! /bin/bash -ue
 
+# These varables must be set
+#jiraHost=jiraserver:8080
+#userAgent=username:password
+
 if [[ $# != 1 ]]; then
 cat <<EOF
 
@@ -13,7 +17,18 @@ fi
 
 file=$1
 [[ ! -f $file ]] && (echo "$file: No such file or directory" ; exit)
-descStr=$(cat $file)
+# Clean up the body text so that it can be passed through REST.
+# In order
+# (tr)   Delete all characters except TAB (\11), LF (\\12) & printable 
+#        characters (\40-\176)
+# (perl) Substitute single-quotes for all double-quotes
+# (perl) Substitute literal '\n' for newlines so it can be used by REST
+# (perl) Substitute literal '\r' for carriage returns it can be used by REST
+descStr=$(cat $file | \
+    tr -cd '\11\12\40-\176' | \
+    perl -p -e "s/\"/'/g"   | \
+    perl -p -e 's/\n/\\n/'  | \
+    perl -p -e 's/\r/\\r/')
 
 # Copy the 'subject' to the 'Summary String' 
 if [[ -f subject ]]; then
@@ -21,26 +36,48 @@ if [[ -f subject ]]; then
 else
     sumStr="Unknown Subject"
 fi
+# Copy the 'from' to the 'From String'
+# Remove '"' so it can easily be passed to 'mailx'
+if [[ -f from ]]; then
+#    fromStr=$(cat from | tr -d '>' | awk -F '<' '{print $2}')
+    fromStr=$(cat from | tr -d '"')
+else
+    fromStr="unknown"
+fi
+
+unset https_proxy
+
+###############################################################################
+# Project Name (project) "Rest Test" has a 'key' value of "RT"
+# 'Issue Type' (issuetype)
+# Valid values for 'name': Bug, Task, Improvement, Epic, Story, Risk
+# Subject (summary)
+# Valid value: String
+# Issue Description (description)
+# Valid values: String (printable characters only)
+# Assignee (assignee)
+# Valid values: any jira account that is member of "Rest Test" project
+# 'Priority' (priority)
+# Valid values for 'name' are:  P1-Stopper, P2-High, P3-Medium, P4-Low
+###############################################################################
 
 data='{
     "fields": {
-        "project": { "key": "RT" },
-        "issuetype": { "name": "Bug" },
-        "summary": "'$sumStr'",
+        "project":     { "key": "RT" },
+        "issuetype":   { "name": "Bug" },
+        "summary":     "'$sumStr'",
         "description": "'$descStr'",
-	"assignee": { "name": "timjpdx" },
-	"priority": { "name": "High" }
+	"assignee":    { "name": "timjpdx" },
+	"priority":    { "name": "High" }
     }
 }'
 
 # Don't exit if 'curl' returns 'Bad Status'
-set +e
-set -x
-curl --insecure -D- -X POST -u timjpdx:skifor51 --data "$data" \
+set -ex
+curl --insecure -D- -X POST -u $userAgent --data "$data" \
       -H "Content-Type: application/json" \
-      ace:8080/rest/api/2/issue > curl.stdout 2> curl.stderr
-set +e
-set -x
+      $jiraHost/rest/api/2/issue > curl.stdout 2> curl.stderr
+set +ex
 # If 'curl' return 'Bad Status', a message (not jason) will have been
 # sent to stderr (curl.stderr)
 stat=$?
@@ -64,7 +101,7 @@ ERROR: $(jq --raw-output .errors rest-reply.json)
 $(jq --raw-output .errorMessages rest-reply.json)
 
 EOF
-    cat reply.body
+    cat reply.body | mailx -s "STM Execution Tracking ERRORS" "$fromStr"
     exit 1
 fi
 
@@ -75,4 +112,5 @@ A new STM Execution Tracking (SET) Bug has been submitted on your behalf.
     ID  = $id
     Key = $key
 EOF
-cat reply.body
+
+cat reply.body | mailx -s "STM Execution Tracking" "$fromStr"

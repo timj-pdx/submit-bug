@@ -1,21 +1,31 @@
-Submit Bug (Still under development)
+Submit Bug to Jira
 
-These scripts will, upon receipt of an Email create a bug in Jira. These
-scripts are run from the mail server.
+This is just a set of scripts that is a 'proof of concept' that bug can be
+submitted to JIRA from an Email. It assumes the Email Server is Linux
+(Postfix). The Email can be sent from a Windoze box.
 
-The Email Subject will be used as the 'summary' in the bug. The Email Body
-will be used as the 'description' in the bug.
+You will need to have an account in JIRA. Two variables need to set in the
+'submit-bug' script: jiraHost & userAgent. 
 
-An Email response will be sent. If the submission was successful, the email
-will contain the bug 'ID' & 'KEY'. If the submission was not successful, the
-email will contain error messages. The Error may have occurred in the initial
-call to curl or curl will return the error message (JSON) from Jira.
+If an Email is sent to 'jira-rest' a but will be submitted to JIRA. The
+Subject Line will be used for the JIRA Summary. The body of Email will be
+used for the Bug Description.
+
+An Email response will be sent in responce to the Bug Email. If the
+submission was successful, the email will contain the bug 'ID' & 'KEY'. If
+the submission was not successful, the email will contain error messages. The
+Error may have occurred in the initial call to curl or curl will return the
+error message (JSON) from JIRA.
 
 The following scripts are being used:
     submit       This bash script is called when mail is received. It
                  will call parse-email & submit-bug.
     parse-email  This python script will parse the email using the
                  'Parser' module.
+	debug-email  This python script will parse the email using the 'Parser'
+                 module. It is very verbose and is can used to debug Email
+                 that may be sent from different/new mail client. I found the
+                 layout of email from different mail server varies greatly.
     submit-bug   This bash script will use the REST API to submit a
                  BUG to Jira.
     README       This file.

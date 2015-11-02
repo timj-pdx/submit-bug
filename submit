@@ -1,0 +1,25 @@
+#! /bin/bash -ue
+
+# -u Error if any unset variable accessed
+# -e Error/Exit if any command returns non-zero
+
+submitDir=/tmp/submit$$
+
+# The default umask for 'nobody' is 077
+# During Development we need to be able read/edit these files
+umask 00
+mkdir $submitDir
+cd $submitDir
+
+# The Raw Email is being piped to stdin, just redirect to a file
+cat > body
+
+# Parse the Raw Email
+/usr/local/lib/jira-rest/parse-email body
+#/tmp/jira/debug-email body
+
+# Submit the bug to JIRA using the REST API
+/usr/local/lib/jira-rest/submit-bug parsed-body
+
+# We will only get here if all the above commands completed successfully
+rm -rf $submitDir
